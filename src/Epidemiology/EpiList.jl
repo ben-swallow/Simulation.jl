@@ -4,36 +4,52 @@
                  MO <: AbstractMovement,
                  T <: AbstractTypes,
                  P <: AbstractParams} <: AbstractTypes
-Epi list houses all disease class specific information including trait information and movement types.
+Epi list houses all disease class specific information including trait information and
+movement types.
 """
-mutable struct EpiList{TR <: AbstractTraits,
-                 MO <: AbstractMovement,
-                 T <: AbstractTypes,
-                 P <: AbstractParams} <: AbstractTypes
-  names::Vector{String}
-  traits::TR
-  abun::Vector{Int64}
-  types::T
-  movement::MO
-  params::P
+mutable struct EpiList{
+    TR <: AbstractTraits,
+    MO <: AbstractMovement,
+    T <: AbstractTypes,
+    P <: AbstractParams,
+} <: AbstractTypes
 
-  function EpiList{TR, MO, T, P}(names:: Vector{String}, traits::TR, abun::Vector{Int64}, types::T, movement::MO, params::P) where {
-                       TR <: AbstractTraits,
-                       MO <: AbstractMovement,
-                       T <: AbstractTypes,
-                       P <: AbstractParams}
-      new{TR, MO, T, P}(names, traits, abun, types,
-       movement, params)
-  end
-  function EpiList{TR, MO, T, P}(traits::TR, abun::Vector{Int64}, types::T, movement::MO, params::P) where {
-                       TR <: AbstractTraits,
-                       MO <: AbstractMovement,
-                       T <: AbstractTypes,
-                       P <: AbstractParams}
-      names = map(x -> "$x", 1:length(abun))
-      new{TR, MO, T, P}(names, traits, abun, types,
-       movement, params)
-  end
+    disease_classes::Vector{String}
+    risk_factors::NamedTuple
+    traits::TR
+    abun::Vector{Int64}
+    types::T
+    movement::MO
+    params::P
+
+    function EpiList{TR, MO, T, P}(
+        disease_classes::Vector{String},
+        risk_factors::NamedTuple,
+        traits::TR,
+        abun::Vector{Int64},
+        types::T,
+        movement::MO,
+        params::P
+    ) where {TR<:AbstractTraits, MO<:AbstractMovement, T<:AbstractTypes, P<:AbstractParams}
+        return new{TR, MO, T, P}(
+            disease_classes, risk_factors, traits, abun, types, movement, params,
+        )
+    end
+
+    function EpiList{TR, MO, T, P}(
+        traits::TR, abun::Vector{Int64}, types::T, movement::MO, params::P
+    ) where {
+        TR <: AbstractTraits,
+        MO <: AbstractMovement,
+        T <: AbstractTypes,
+        P <: AbstractParams
+    }
+        disease_classes = map(x -> "$x", 1:length(abun))
+        risk_factors = NamedTuple() # Assume none
+        new{TR, MO, T, P}(
+            disease_classes, risk_factors, traits, abun, types, movement, params
+        )
+    end
 end
 
 import Diversity.API: _gettypenames
@@ -65,16 +81,28 @@ function _getdiversityname(el::EpiList)
     return _getdiversityname(el.types)
 end
 
-function SIS(traits::TR, abun::Vector{Int64},
-    movement::MO, params::P, age_categories::Int64 = 1) where {TR <: AbstractTraits,
-        MO <: AbstractMovement, P <: AbstractParams}
+function SIS(
+    traits::TR,
+    abun::Vector{Int64},
+    movement::MO,
+    params::P,
+    risk_factors = NamedTuple(),
+) where {TR <: AbstractTraits, MO <: AbstractMovement, P <: AbstractParams}
 
-    names = ["Susceptible", "Infected", "Dead"]
-    new_names = [ifelse(i == 1, "$j", "$j$i") for i in 1:age_categories, j in names]
-    new_names =  ["Virus"; new_names[1:end]]
-    types = UniqueTypes(length(new_names))
-    length(abun) == length(new_names) || throw(DimensionMismatch("Abundance vector doesn't match number of disease classes"))
-  EpiList{typeof(traits), typeof(movement), typeof(types), typeof(params)}(new_names, traits, abun, types, movement, params)
+    disease_classes = ["Virus", "Susceptible", "Infected", "Dead"]
+    total_classes = if length(risk_factors) == 0
+        length(disease_classes)
+    else
+        length(disease_classes) * sum(values(a))
+    end
+    types = UniqueTypes(length(total_classes))
+    length(abun) == length(total_classes) || throw(
+        DimensionMismatch("Abundance vector doesn't match number of disease classes")
+    )
+
+    return EpiList{typeof(traits), typeof(movement), typeof(types), typeof(params)}(
+        disease_classes, risk_factors, traits, abun, types, movement, params
+    )
 end
 
 function SIR(traits::TR, abun::Vector{Int64},
