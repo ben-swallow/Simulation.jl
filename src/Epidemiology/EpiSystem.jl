@@ -40,17 +40,17 @@ mutable struct EpiSystem{EE <: AbstractEpiEnv, EL <: EpiList, ER <: AbstractTrai
   relationship::ER
   lookup::Vector{EpiLookup}
   cache::EpiCache
+  households::Union{Households, Missing}
 
   function EpiSystem{EE, EL, ER}(abundances::EpiLandscape,
-    epilist::EL, epienv::EE, ordinariness::Union{Matrix{Float64}, Missing}, relationship::ER, lookup::Vector{EpiLookup}, cache::EpiCache) where {EE <:
+    epilist::EL, epienv::EE, ordinariness::Union{Matrix{Float64}, Missing}, relationship::ER, lookup::Vector{EpiLookup}, cache::EpiCache, hh::Union{Households, Missing}=missing) where {EE <:
      AbstractEpiEnv,
     EL <: EpiList, ER <: AbstractTraitRelationship}
-    new{EE, EL, ER}(abundances, epilist, epienv, ordinariness, relationship, lookup, cache)
+    new{EE, EL, ER}(abundances, epilist, epienv, ordinariness, relationship, lookup, cache, hh)
   end
 end
 
-function EpiSystem(popfun::F, epilist::EpiList, epienv::GridEpiEnv,
-    rel::AbstractTraitRelationship) where {F<:Function}
+function EpiSystem(popfun::F, epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelationship, hh::Union{Households, Missing}=missing) where {F<:Function}
 
   # Create matrix landscape of zero abundances
   ml = emptyepilandscape(epienv, epilist)
@@ -60,11 +60,14 @@ function EpiSystem(popfun::F, epilist::EpiList, epienv::GridEpiEnv,
   lookup_tab = collect(map(k -> genlookups(epienv, k), getkernels(epilist.human.movement)))
   nm = zeros(Int64, size(ml.matrix))
   vm = zeros(Int64, size(ml.matrix))
-  EpiSystem{typeof(epienv), typeof(epilist), typeof(rel)}(ml, epilist, epienv, missing, rel, lookup_tab, EpiCache(nm, vm, false))
+  if !ismissing(hh)
+      instantiate_households!(ml, hh)
+  end
+  EpiSystem{typeof(epienv), typeof(epilist), typeof(rel)}(ml, epilist, epienv, missing, rel, lookup_tab, EpiCache(nm, vm, false), hh)
 end
 
-function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelationship)
-    epi = EpiSystem(populate!, epilist, epienv, rel)
+function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelationship, hh::Union{Households, Missing}=missing)
+    epi = EpiSystem(populate!, epilist, epienv, rel, hh)
     # Add in the initial susceptible population
     idx = findfirst(epilist.human.names .== "Susceptible")
     if idx == nothing
@@ -72,6 +75,9 @@ function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelat
         throw(ArgumentError(msg))
     end
     epi.abundances.grid[idx, :, :] .+= epienv.initial_population
+    if !ismissing(hh)
+        instantiate_households!(epi.abundances, hh)
+    end
     return epi
 end
 

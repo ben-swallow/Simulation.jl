@@ -137,6 +137,9 @@ export EpiList, SIS, SIR, SEIR, SEIRS, SEI2HRD
 include("Epidemiology/EpiLandscape.jl")
 export EpiLandscape
 
+include("Epidemiology/Households.jl")
+export Households
+
 include("Epidemiology/EpiSystem.jl")
 export EpiSystem
 
