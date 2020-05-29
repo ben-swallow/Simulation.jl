@@ -60,7 +60,7 @@ function EpiSystem(popfun::F, epilist::EpiList, epienv::GridEpiEnv, rel::Abstrac
   lookup_tab = collect(map(k -> genlookups(epienv, k), getkernels(epilist.human.movement)))
   nm = zeros(Int64, size(ml.matrix))
   vm = zeros(Int64, size(ml.matrix))
-  if !ismissing(hh)
+  if !ismissing(hh) && (sum(ml.matrix) > 0)
       instantiate_households!(ml, hh)
   end
   EpiSystem{typeof(epienv), typeof(epilist), typeof(rel)}(ml, epilist, epienv, missing, rel, lookup_tab, EpiCache(nm, vm, false), hh)

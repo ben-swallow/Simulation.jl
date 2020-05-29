@@ -138,7 +138,7 @@ include("Epidemiology/EpiLandscape.jl")
 export EpiLandscape, human, virus
 
 include("Epidemiology/Households.jl")
-export Households
+export Households, emptyHouseholds
 
 include("Epidemiology/EpiSystem.jl")
 export EpiSystem

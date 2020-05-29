@@ -16,8 +16,6 @@ function emptyHouseholds(totalpop::Int64, numclasses::Int64, numhouseholds::Vect
     ids = collect(1:totalpop)
     return Households(ids, fill(0, totalpop), fill(0, totalpop), fill(0, totalpop, numclasses), numhouseholds)
 end
-totalpop = sum(epi.abundances.matrix)
-hh = emptyHouseholds(totalpop, 4, fill(4, size(epi.abundances.matrix, 2)))
 
 function instantiate_households!(ml::EpiLandscape, hh::Households)
     # Find location on grid
