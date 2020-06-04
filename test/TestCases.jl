@@ -102,6 +102,42 @@ function TestEpiSystemFromPopulation(initial_pop::Matrix{<:Real})
     return epi
 end
 
+function TestEpiSystemHousehold()
+    numvirus = 1
+    numclasses = 4
+    birth = [fill(1e-5/day, numclasses - 1); 0.0/day]
+    death = [fill(1e-5/day, numclasses - 1); 0.0/day]
+    beta_force = 5.0/day
+    beta_env = 0.5/day
+    sigma = 0.05/day
+    virus_growth = 0.0001/day
+    virus_decay = 0.07/day
+    param = SIRGrowth{typeof(unit(beta_force))}(birth, death, virus_growth, virus_decay, beta_force, beta_env, sigma)
+    param = transition(param)
+
+    grid = (2, 2)
+    area = 10.0km^2
+    epienv = simplehabitatAE(298.0K, grid, area, NoControl())
+
+    abun_h = [1000, 1, 0, 0]
+    abun_v = [10]
+
+    dispersal_dists = [fill(2.0km, numclasses - 1); 1e-2km]
+    kernel = GaussianKernel.(dispersal_dists, 1e-10)
+    movement = AlwaysMovement(kernel)
+
+    traits = GaussTrait(fill(298.0K, numvirus), fill(0.1K, numvirus))
+    epilist = SIR(traits, abun_v, abun_h, movement, param)
+
+    totalpop = sum(abun_h)
+    hh = emptyHouseholds(totalpop, numclasses, fill(4, prod(grid)))
+
+    rel = Gauss{eltype(epienv.habitat)}()
+    epi = EpiSystem(epilist, epienv, rel, hh)
+
+    return epi
+end
+
 
 function TestCache()
     numSpecies = 3

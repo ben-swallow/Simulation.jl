@@ -73,7 +73,22 @@ rel = Gauss{eltype(epienv.habitat)}()
 
 # Add households
 totalpop = sum(epienv.initial_population)
-hh = Simulation.emptyHouseholds(totalpop, numclasses, fill(4, size(scotpop, 1) * size(scotpop, 2)))
+hh = Simulation.emptyHouseholds(totalpop, numclasses * age_categories, fill(4, size(scotpop, 1) * size(scotpop, 2)))
 
 # Create epi system with all information
 epi = EpiSystem(epilist, epienv, rel, hh)
+
+split_pop = rand.(Multinomial.(Int.(epi.abundances.matrix[1, :]), 10))
+for j in 1:size(epi.abundances.matrix, 2)
+    epi.abundances.matrix[cat_idx[:, 1], j] .= split_pop[j]
+end
+
+# Add in initial infections randomly (samples weighted by population size)
+N_cells = size(epi.abundances.matrix, 2)
+samp = sample(1:N_cells, weights(1.0 .* epi.abundances.matrix[1, :]), 100)
+epi.abundances.matrix[vcat(cat_idx[:, 2]...), samp] .= 10 # Exposed pop
+
+instantiate_households!(epi)
+
+sum(epi.abundances.matrix, dims = 2)[:, 1] == sum(epi.households.infection_status, dims = 1)[1, :]
+Simulation.update!(epi, 1day)
