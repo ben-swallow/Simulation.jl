@@ -115,11 +115,42 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
 
                 # Make transitions
                 trans = collect(rand(rng, b) for b in Binomial.(human(epi.abundances)[:, i],  trans_prob))
+
+                # Update households
+                if !ismissing(epi.households)
+                    householdupdate!(epi, j, i, trans, births)
+                end
+
+                # Update classes
                 human(epi.abundances)[j, i] += sum(trans)
                 human(epi.abundances)[:, i] .-= trans
             end
         end
     end
+end
+
+function householdupdate!(epi::EpiSystem, class::Int64, pos::Int64, trans::Vector{Int64}, births::Int64)
+    if births > 0
+        addindividuals!(epi, births, pos)
+    end
+    indivs = epi.households.individualID[epi.households.gridID .== pos]
+    inf  = @view epi.households.infection_status[indivs, :]
+    for t in 1:length(trans)
+        ids = findall(inf[:, t] .> 0)
+        samp = sample(ids, trans[t], replace = false)
+        inf[samp, class] .+= 1
+        inf[samp, t] .-= 1
+    end
+end
+
+function addindividuals!(epi::EpiSystem, births::Int64, pos::Int64)
+    totalpop = maximum(epi.households.individualID)
+    new_indivs = (totalpop + 1):(totalpop + births)
+    append!(epi.households.individualID, collect(new_indivs))
+    append!(epi.households.householdID, rand(epi.households.householdID[epi.households.gridID .== pos], births))
+    append!(epi.households.gridID, fill(pos, births))
+    epi.households.infection_status = vcat(epi.households.infection_status, fill(0, births, size(epi.households.infection_status, 2)))
+    epi.households.infection_status[new_indivs, 1] .+= 1
 end
 
 """
