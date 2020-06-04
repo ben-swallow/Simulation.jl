@@ -75,10 +75,15 @@ function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelat
         throw(ArgumentError(msg))
     end
     epi.abundances.grid[idx, :, :] .+= epienv.initial_population
-    if !ismissing(hh)
+    if !ismissing(hh) && !hh.instantiated
         instantiate_households!(epi.abundances, hh)
     end
     return epi
+end
+
+function instantiate_households!(epi::EpiSystem)
+    epi.households = emptyHouseholds(sum(epi.abundances.matrix), size(epi.abundances.matrix, 1), epi.households.numhouseholds)
+    instantiate_households!(epi.abundances, epi.households)
 end
 
 

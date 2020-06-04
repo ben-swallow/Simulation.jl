@@ -141,7 +141,7 @@ include("Epidemiology/Households.jl")
 export Households, emptyHouseholds
 
 include("Epidemiology/EpiSystem.jl")
-export EpiSystem
+export EpiSystem, instantiate_households!
 
 include("Epidemiology/EpiTraits.jl")
 
