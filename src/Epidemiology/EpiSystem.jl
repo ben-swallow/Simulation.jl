@@ -82,7 +82,7 @@ function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelat
 end
 
 function instantiate_households!(epi::EpiSystem)
-    epi.households = emptyHouseholds(sum(epi.abundances.matrix), size(epi.abundances.matrix, 1), epi.households.numhouseholds)
+    epi.households = emptyHouseholds(sum(epi.abundances.matrix), size(epi.abundances.matrix, 1), epi.households.numhouseholds, epi.households.beta_household)
     instantiate_households!(epi.abundances, epi.households)
 end
 

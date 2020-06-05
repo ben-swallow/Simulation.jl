@@ -1,21 +1,22 @@
-mutable struct Households
+mutable struct Households{U <: Unitful.Units}
     individualID::Vector{Int64}
     gridID::Vector{Int64}
     householdID::Vector{Int64}
     infection_status::Matrix{Int64}
     numhouseholds::Vector{Int64}
     instantiated::Bool
+    beta_household::TimeUnitType{U}
 
-    function Households(individualID::Vector{Int64}, gridID::Vector{Int64}, householdID::Vector{Int64}, infection_status::Matrix{Int64}, numhouseholds::Vector{Int64}, instantiated::Bool)
-        length(individualID) == length(gridID) || throw(DimensionMismatch("Number of individuals in grid IDs doesn't match individual IDs"))
-        length(individualID) == length(householdID) || throw(DimensionMismatch("Number of individuals in household IDs doesn't match individual IDs"))
-        size(infection_status, 1) == length(individualID) || throw(DimensionMismatch("Number of individuals in infection status doesn't match IDs"))
-        return new(individualID, gridID, householdID, infection_status, numhouseholds, instantiated)
+    function Households{U}(individualID::Vector{Int64}, gridID::Vector{Int64}, householdID::Vector{Int64}, infection_status::Matrix{Int64}, numhouseholds::Vector{Int64}, instantiated::Bool, beta_household::TimeUnitType{U}) where {U <: Unitful.Units}
+         length(individualID) == length(gridID) || throw(DimensionMismatch("Number of individuals in grid IDs doesn't match individual IDs"))
+         length(individualID) == length(householdID) || throw(DimensionMismatch("Number of individuals in household IDs doesn't match individual IDs"))
+         size(infection_status, 1) == length(individualID) || throw(DimensionMismatch("Number of individuals in infection status doesn't match IDs"))
+         return new{U}(individualID, gridID, householdID, infection_status, numhouseholds, instantiated, beta_household)
     end
 end
-function emptyHouseholds(totalpop::Int64, numclasses::Int64, numhouseholds::Vector{Int64})
+function emptyHouseholds(totalpop::Int64, numclasses::Int64, numhouseholds::Vector{Int64}, beta_household::TimeUnitType{U}) where U <: Unitful.Units
     ids = collect(1:totalpop)
-    return Households(ids, fill(0, totalpop), fill(0, totalpop), fill(0, totalpop, numclasses), numhouseholds, false)
+    return Households{U}(ids, fill(0, totalpop), fill(0, totalpop), fill(0, totalpop, numclasses), numhouseholds, false, beta_household)
 end
 
 function instantiate_households!(ml::EpiLandscape, hh::Households)

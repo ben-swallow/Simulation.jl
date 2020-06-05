@@ -94,6 +94,12 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
     Threads.@threads for i in 1:dims
         rng = epi.abundances.seed[Threads.threadid()]
         N = sum_pop(epi.abundances.matrix, i)
+
+        # Update household transmissions
+        if !ismissing(epi.households)
+             householdtransmission!(epi, i, timestep)
+        end
+
         # Loop through classes in chosen square
         for j in 1:classes
             # Convert 1D dimension to 2D coordinates
@@ -125,6 +131,29 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
                 human(epi.abundances)[j, i] += sum(trans)
                 human(epi.abundances)[:, i] .-= trans
             end
+        end
+    end
+end
+
+
+function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time)
+    rng = epi.abundances.seed[Threads.threadid()]
+    households = epi.households.householdID[epi.households.gridID .== pos]
+    for h in households
+        indivs = epi.households.individualID[epi.households.householdID .== h]
+        inf = epi.households.infection_status[epi.households.householdID .== h, :]
+        infected = epi.epilist.human.infectious
+        susceptible = epi.epilist.human.susceptible
+        for i in eachindex(infected)
+            force = sum(inf[:, infected[i]]) * timestep * epi.households.beta_household
+            force_prob = 1 - exp(-force)
+            new_infs = rand(rng, Binomial(sum(inf[:, susceptible[i]]), force_prob))
+            ids = indivs[inf[:, susceptible[i]] .> 0]
+            samp = sample(ids, new_infs, replace = false)
+            epi.households.infection_status[samp, infected[i]] .+= 1
+            epi.households.infection_status[samp, susceptible[i]] .-= 1
+            human(epi.abundances)[infected[i], pos] += new_infs
+            human(epi.abundances)[susceptible[i], pos] -= new_infs
         end
     end
 end

@@ -120,6 +120,7 @@ function TestEpiSystemHousehold()
     death = [fill(1e-5/day, numclasses - 1); 0.0/day]
     beta_force = 5.0/day
     beta_env = 0.5/day
+    beta_household = 0.5/day
     sigma = 0.05/day
     virus_growth = 0.0001/day
     virus_decay = 0.07/day
@@ -130,18 +131,24 @@ function TestEpiSystemHousehold()
     area = 10.0km^2
     epienv = simplehabitatAE(298.0K, grid, area, NoControl())
 
-    abun_h = [1000, 1, 0, 0]
-    abun_v = [10]
+    sus = ["Susceptible"]
+    inf = ["Infected"]
+    abun_h = (
+    Susceptible = 1000,
+    Infected = 1, Recovered = 0,
+    Dead = 0,
+    susceptibility = sus, infectious = inf)
+    abun_v = (Virus = 10,)
 
     dispersal_dists = [fill(2.0km, numclasses - 1); 1e-2km]
     kernel = GaussianKernel.(dispersal_dists, 1e-10)
     movement = AlwaysMovement(kernel)
 
     traits = GaussTrait(fill(298.0K, numvirus), fill(0.1K, numvirus))
-    epilist = SIR(traits, abun_v, abun_h, movement, param)
+    epilist = EpiList(traits, abun_v, abun_h, movement, param)
 
-    totalpop = sum(abun_h)
-    hh = emptyHouseholds(totalpop, numclasses, fill(4, prod(grid)))
+    totalpop = abun_h.Susceptible + abun_h.Infected + abun_h.Recovered
+    hh = emptyHouseholds(totalpop, numclasses, fill(4, prod(grid)), beta_household)
 
     rel = Gauss{eltype(epienv.habitat)}()
     epi = EpiSystem(epilist, epienv, rel, hh)
