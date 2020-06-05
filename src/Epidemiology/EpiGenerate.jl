@@ -134,20 +134,18 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
         end
     end
 end
-
-
-function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time)
-    rng = epi.abundances.seed[Threads.threadid()]
-    households = epi.households.householdID[epi.households.gridID .== pos]
+function transmission_loop!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time, households::Vector{Int64}, rng::MersenneTwister)
     for h in households
-        indivs = epi.households.individualID[epi.households.householdID .== h]
-        inf = epi.households.infection_status[epi.households.householdID .== h, :]
+        is_household = epi.households.householdID .== h
+        indivs = epi.households.individualID[is_household]
+        inf = epi.households.infection_status[is_household, :]
         infected = epi.epilist.human.infectious
         susceptible = epi.epilist.human.susceptible
         for i in eachindex(infected)
-            force = sum(inf[:, infected[i]]) * timestep * epi.households.beta_household
+            infs = sum_pop(inf, infected[i]); susc = sum_pop(inf, susceptible[i])
+            force = infs * timestep * epi.households.beta_household
             force_prob = 1 - exp(-force)
-            new_infs = rand(rng, Binomial(sum(inf[:, susceptible[i]]), force_prob))
+            new_infs = rand(rng, Binomial(susc, force_prob))
             ids = indivs[inf[:, susceptible[i]] .> 0]
             samp = sample(ids, new_infs, replace = false)
             epi.households.infection_status[samp, infected[i]] .+= 1
@@ -156,6 +154,12 @@ function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Ti
             human(epi.abundances)[susceptible[i], pos] -= new_infs
         end
     end
+end
+
+function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time)
+    rng = epi.abundances.seed[Threads.threadid()]
+    households = epi.households.householdID[epi.households.gridID .== pos]
+    transmission_loop!(epi, pos, timestep, households, rng)
 end
 
 function householdupdate!(epi::EpiSystem, class::Int64, pos::Int64, trans::Vector{Int64}, births::Int64)
