@@ -134,10 +134,10 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
         end
     end
 end
-function transmission_loop!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time, households::Array{Array{Int64, 1}, 1}, rng::MersenneTwister)
-    for h in eachindex(households)
-        indivs = epi.households.individualID[households[h]]
-        inf = epi.households.infection_status[households[h], :]
+function transmission_loop!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time, households::Array{Int64, 1}, rng::MersenneTwister)
+    for h in households
+        indivs = epi.households.by_household[h]
+        inf = epi.households.infection_status[indivs, :]
         infected = epi.epilist.human.infectious
         susceptible = epi.epilist.human.susceptible
         for i in eachindex(infected)
@@ -146,7 +146,7 @@ function transmission_loop!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time, 
             force = infs * timestep * epi.households.beta_household
             force_prob = 1 - exp(-force)
             new_infs = rand(rng, Binomial(susc, force_prob))
-            ids = @inbounds indivs[available_susceptibles]
+            ids = indivs[available_susceptibles]
             samp = sample(ids, new_infs, replace = false)
             for s in samp
                 epi.households.infection_status[s, infected[i]] += 1
@@ -162,7 +162,7 @@ end
 function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Time)
     rng = epi.abundances.seed[Threads.threadid()]
     householdID = unique(epi.households.householdID[epi.households.by_gridID[pos]])
-    transmission_loop!(epi, pos, timestep, epi.households.by_household[householdID], rng)
+    transmission_loop!(epi, pos, timestep, householdID, rng)
 end
 
 function householdupdate!(epi::EpiSystem, class::Int64, pos::Int64, trans::Vector{Int64}, births::Int64)
@@ -170,9 +170,8 @@ function householdupdate!(epi::EpiSystem, class::Int64, pos::Int64, trans::Vecto
         addindividuals!(epi, births, pos)
     end
     indivs = epi.households.by_gridID[pos]
-    inf  = epi.households.infection_status[indivs, :]
     for t in 1:length(trans)
-        ids = indivs[inf[:, t] .> 0]
+        ids = indivs[epi.households.infection_status[indivs, t] .> 0]
         samp = sample(ids, trans[t], replace = false)
         for s in samp
             epi.households.infection_status[s, class] += 1
