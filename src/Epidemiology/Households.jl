@@ -6,12 +6,16 @@ mutable struct Households{U <: Unitful.Units}
     numhouseholds::Vector{Int64}
     instantiated::Bool
     beta_household::TimeUnitType{U}
+    by_household::Array{Array{Int64, 1}, 1}
+    by_gridID::Array{Array{Int64, 1}, 1}
 
     function Households{U}(individualID::Vector{Int64}, gridID::Vector{Int64}, householdID::Vector{Int64}, infection_status::Matrix{Int64}, numhouseholds::Vector{Int64}, instantiated::Bool, beta_household::TimeUnitType{U}) where {U <: Unitful.Units}
          length(individualID) == length(gridID) || throw(DimensionMismatch("Number of individuals in grid IDs doesn't match individual IDs"))
          length(individualID) == length(householdID) || throw(DimensionMismatch("Number of individuals in household IDs doesn't match individual IDs"))
          size(infection_status, 1) == length(individualID) || throw(DimensionMismatch("Number of individuals in infection status doesn't match IDs"))
-         return new{U}(individualID, gridID, householdID, infection_status, numhouseholds, instantiated, beta_household)
+         by_household = [individualID[householdID .== h] for h in sort(unique(householdID))]
+         by_gridID = [individualID[gridID .== g] for g in sort(unique(gridID))]
+         return new{U}(individualID, gridID, householdID, infection_status, numhouseholds, instantiated, beta_household, by_household, by_gridID)
     end
 end
 function emptyHouseholds(totalpop::Int64, numclasses::Int64, numhouseholds::Vector{Int64}, beta_household::TimeUnitType{U}) where U <: Unitful.Units
@@ -35,5 +39,7 @@ function instantiate_households!(ml::EpiLandscape, hh::Households)
         end
     end
     hh.instantiated = true
+    hh.by_household = [hh.individualID[hh.householdID .== h] for h in unique(hh.householdID)]
+    hh.by_gridID = [hh.individualID[hh.gridID .== g] for g in unique(hh.gridID)]
     sum(hh.infection_status) == length(hh.individualID) || error("Infection status does not match number of individuals")
 end
