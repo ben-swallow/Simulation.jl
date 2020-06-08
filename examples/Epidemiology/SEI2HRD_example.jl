@@ -40,15 +40,13 @@ param = SEI2HRDGrowth(birth, death, virus_growth_asymp, virus_growth_symp, virus
 param = transition(param)
 
 # Read in population sizes for Scotland
-scotpop = Array{Float64, 2}(readfile("test/examples/ScotlandDensity2011.tif", 0.0, 7e5, 5e5, 1.25e6))
+scotpop = Array{Float64, 2}(readfile(Simulation.path("test", "examples", "ScotlandDensity2011.tif"), 0.0, 7e5, 5e5, 1.25e6))
 
 # Set up simple gridded environment
 area = 525_000.0km^2
 epienv = simplehabitatAE(298.0K, area, NoControl(), scotpop)
 
 # Set population to initially have no individuals
-sus = ["Susceptible"]
-inf = ["Asymptomatic", "Symptomatic"]
 abun_h = (
     Susceptible = 0,
     Exposed = 0,
@@ -56,9 +54,11 @@ abun_h = (
     Symptomatic = 0,
     Hospitalised = 0,
     Recovered = 0,
-    Dead = 0,
-    susceptibility = sus,
-    infectious = inf
+    Dead = 0
+)
+disease_classes = (
+    susceptible = ["Susceptible"],
+    infectious = ["Asymptomatic", "Symptomatic"]
 )
 abun_v = (Virus = 0,)
 
@@ -69,7 +69,7 @@ movement = AlwaysMovement(kernel)
 
 # Traits for match to environment (turned off currently through param choice, i.e. virus matches environment perfectly)
 traits = GaussTrait(fill(298.0K, numvirus), fill(0.1K, numvirus))
-epilist = EpiList(traits, abun_v, abun_h, movement, param)
+epilist = EpiList(traits, abun_v, abun_h, disease_classes, movement, param)
 rel = Gauss{eltype(epienv.habitat)}()
 
 # Create epi system with all information
@@ -88,13 +88,6 @@ times = 1year; interval = 1day; timestep = 1day
 
 if do_plot
     using Plots
-    plotlyjs()
     # View summed SIR dynamics for whole area
-    display(plot(mapslices(sum, abuns[1, :, :], dims = 1)[1, :], color = :Blue, label = "Susceptible"))
-    display(plot!(mapslices(sum, abuns[2, :, :], dims = 1)[1, :], color = :Orange, label = "Exposed"))
-    display(plot!(mapslices(sum, abuns[3, :, :], dims = 1)[1, :], color = :Yellow, label = "Asymptomatic"))
-    display(plot!(mapslices(sum, abuns[4, :, :], dims = 1)[1, :], color = :Red, label = "Symptomatic"))
-    display(plot!(mapslices(sum, abuns[5, :, :], dims = 1)[1, :], color = :Darkred, label = "Hospital"))
-    display(plot!(mapslices(sum, abuns[6, :, :], dims = 1)[1, :], color = :Green, label = "Recovered"))
-    display(plot!(mapslices(sum, abuns[7, :, :], dims = 1)[1, :], color = :Black, label = "Deaths"))
+    display(plot_epidynamics(epi, abuns))
 end
