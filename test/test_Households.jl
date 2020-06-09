@@ -29,3 +29,9 @@ simulate!(epi, 1month, 1day)
 for i in 1:size(epi.abundances.matrix, 2)
     @test sum(epi.abundances.matrix[:, i]) == sum(epi.households.infection_status[epi.households.gridID .== i, :])
 end
+
+
+epi = TestEpiSystemHousehold()
+@time simulate!(epi, 1month, 1day)
+epi = TestEpiSystem()
+@time simulate!(epi, 1month, 1day)

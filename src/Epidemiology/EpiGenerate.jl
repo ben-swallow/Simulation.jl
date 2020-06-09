@@ -112,6 +112,9 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
             # Births
             births = rand(rng, Binomial(human(epi.abundances)[j, i],  params.births[j] * timestep))
             human(epi.abundances)[1, i] += births
+            if births > 0
+                addindividuals!(epi, births, i)
+            end
 
             # Note transposition of transition matrices to make iteration over k faster
             # Calculate force of inf and env inf
@@ -130,10 +133,12 @@ function classupdate!(epi::EpiSystem, timestep::Unitful.Time)
                 trans = rand(rng, Binomial(human(epi.abundances)[k, i], trans_prob))
                 human(epi.abundances)[j, i] += trans
                 human(epi.abundances)[k, i] -= trans
-            end
-            # Update households
-            if !ismissing(epi.households)
-                householdupdate!(epi, j, i, trans, births)
+
+                # Update households
+                if !ismissing(epi.households)
+                    iszero(trans) && continue
+                    householdupdate!(epi, j, k, i, trans)
+                end
             end
         end
     end
@@ -169,18 +174,13 @@ function householdtransmission!(epi::EpiSystem, pos::Int64, timestep::Unitful.Ti
     transmission_loop!(epi, pos, timestep, householdID, rng)
 end
 
-function householdupdate!(epi::EpiSystem, class::Int64, pos::Int64, trans::Vector{Int64}, births::Int64)
-    if births > 0
-        addindividuals!(epi, births, pos)
-    end
+function householdupdate!(epi::EpiSystem, to_class::Int64, from_class::Int64, pos::Int64, trans::Int64)
     indivs = epi.households.by_gridID[pos]
-    for t in 1:length(trans)
-        ids = indivs[epi.households.infection_status[indivs, t] .> 0]
-        samp = sample(ids, trans[t], replace = false)
-        for s in samp
-            epi.households.infection_status[s, class] += 1
-            epi.households.infection_status[s, t] -= 1
-        end
+    ids = indivs[epi.households.infection_status[indivs, from_class] .> 0]
+    samp = sample(ids, trans, replace = false)
+    for s in samp
+        epi.households.infection_status[s, to_class] += 1
+        epi.households.infection_status[s, from_class] -= 1
     end
 end
 

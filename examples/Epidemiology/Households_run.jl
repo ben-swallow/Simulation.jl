@@ -19,6 +19,7 @@ virus_growth_asymp = virus_growth_symp = fill(0.1/day, age_categories)
 virus_decay = 1.0/day
 beta_force = fill(10.0/day, age_categories)
 beta_env = fill(10.0/day, age_categories)
+beta_household = 0.01/day
 ageing = fill(0.0/day, age_categories - 1) # no ageing for now
 
 # Prob of developing symptoms
@@ -56,24 +57,39 @@ area = 525_000.0km^2
 epienv = simplehabitatAE(298.0K, area, NoControl(), scotpop)
 
 # Set population to initially have no individuals
-abun_h = fill(0, numclasses * age_categories)
-abun_v = fill(0, numvirus)
+# Set population to initially have no individuals
+abun_h = (
+    Susceptible = fill(0, age_categories),
+    Exposed = fill(0, age_categories),
+    Asymptomatic = fill(0, age_categories),
+    Symptomatic = fill(0, age_categories),
+    Hospitalised = fill(0, age_categories),
+    Recovered = fill(0, age_categories),
+    Dead = fill(0, age_categories)
+)
+
+disease_classes = (
+    susceptible = ["Susceptible"],
+    infectious = ["Asymptomatic", "Symptomatic"]
+)
+
+abun_v = (Virus = 0,)
 
 # Dispersal kernels for virus and disease classes
 dispersal_dists = fill(1.0km, numclasses * age_categories)
 cat_idx = reshape(1:(numclasses * age_categories), age_categories, numclasses)
-dispersal_dists[vcat(cat_idx[:, 3:4]...)] .= 20.0km
+dispersal_dists[vcat(cat_idx[:, 3:5]...)] .= 20.0km
 kernel = GaussianKernel.(dispersal_dists, 1e-10)
 movement = AlwaysMovement(kernel)
 
 # Traits for match to environment (turned off currently through param choice, i.e. virus matches environment perfectly)
 traits = GaussTrait(fill(298.0K, numvirus), fill(0.1K, numvirus))
-epilist = SEI2HRD(traits, abun_v, abun_h, movement, param, age_categories)
+epilist = EpiList(traits, abun_v, abun_h, disease_classes, movement, param, age_categories)
 rel = Gauss{eltype(epienv.habitat)}()
 
 # Add households
 totalpop = sum(epienv.initial_population)
-hh = Simulation.emptyHouseholds(totalpop, numclasses * age_categories, fill(4, size(scotpop, 1) * size(scotpop, 2)))
+hh = Simulation.emptyHouseholds(totalpop, numclasses * age_categories, fill(4, size(scotpop, 1) * size(scotpop, 2)), beta_household)
 
 # Create epi system with all information
 epi = EpiSystem(epilist, epienv, rel, hh)
