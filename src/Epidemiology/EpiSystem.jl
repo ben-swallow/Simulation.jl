@@ -68,12 +68,7 @@ end
 function EpiSystem(epilist::EpiList, epienv::GridEpiEnv, rel::AbstractTraitRelationship)
     epi = EpiSystem(populate!, epilist, epienv, rel)
     # Add in the initial susceptible population
-    idx = findfirst(epilist.human.names .== "Susceptible")
-    if idx == nothing
-        msg = "epilist has no Susceptible category. epilist.names = $(epilist.human.names)"
-        throw(ArgumentError(msg))
-    end
-    epi.abundances.grid[idx, :, :] .+= epienv.initial_population
+    epi.abundances.grid .+= epienv.initial_population
     return epi
 end
 
