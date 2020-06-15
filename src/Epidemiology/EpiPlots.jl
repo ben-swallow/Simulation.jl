@@ -1,9 +1,3 @@
-function _compartment_idx(compartment, names)
-    idx = findfirst(names .== compartment)
-    isnothing(idx) && throw(ArgumentError("Compartment $compartment not in $names"))
-    return idx
-end
-
 function _default_steps(abuns)
     N_steps = size(abuns, 3)
     return Int.(floor.(range(1, N_steps; length=4)))
@@ -47,12 +41,11 @@ function _check_args(h)
 end
 @recipe function f(
     h::Plot_EpiHeatmaps;
-    compartment="Exposed",
+    class=:Exposed,
     steps=[],
 )
     _check_args(h)
     epi, abuns = h.args
-    idx = _compartment_idx(compartment, epi.epilist.human.names)
     if isempty(steps)
         steps = _default_steps(abuns)
     end
@@ -63,10 +56,18 @@ end
     match_dimensions --> true
     seriescolor --> :heat
 
+    Nsteps = size(abuns)[end]
+    ax = (AxisArrays.axes(epi.epienv.initial_population)..., Axis{:step}(1:Nsteps))
+    abuns_grid = AxisArray(reshape(abuns, length.(ax)), ax)
+
     subplot = 1
     gridsize = size(epi.epienv.habitat.matrix)
     for step in steps
-        data = Float64.(reshape(abuns[idx, :, step], gridsize...))
+        data = abuns_grid[class=class, step=step].data
+        reducedims = Tuple(1:ndims(data)-2)
+        data = sum(data, dims=reducedims)
+        data = dropdims(data, dims=reducedims)
+        data = Matrix{Any}(data)
         data[.!epi.epienv.active] .= NaN
         x = 1:size(data, 2)
         y = 1:size(data, 1)
@@ -75,7 +76,7 @@ end
         end
         @series begin
             seriestype := :heatmap
-            title := "Step $step ($compartment)"
+            title := "Step $step ($class)"
             subplot := subplot
             background_color --> :lightblue
             background_color_outside --> :white
@@ -116,22 +117,23 @@ Plot the dynamics of `abuns` summed over space, as a function of time.
 """
 plot_epidynamics
 @userplot Plot_EpiDynamics
-@recipe function f(h::Plot_EpiDynamics; category_map=nothing)
+@recipe function f(h::Plot_EpiDynamics; classes=[:Susceptible])
     _check_args(h)
     epi, abuns = h.args
 
-    if isnothing(category_map)
-        # Make each compartment its own category
-        category_map = (name => [idx] for (idx, name) in enumerate(epi.epilist.human.names))
-    end
+    Nsteps = size(abuns)[end]
+    ax = (AxisArrays.axes(epi.epienv.initial_population)..., Axis{:step}(1:Nsteps))
+    abuns_grid = AxisArray(reshape(abuns, length.(ax)), ax)
 
-    for (name, idx) in category_map
-        data = vec(mapslices(sum, abuns[idx, :, :], dims = (1, 2)))
+    for class in classes
+        # Need .data here due to https://github.com/JuliaArrays/AxisArrays.jl/issues/113
+        data = abuns_grid[class=class].data
+        data = vec(mapslices(sum, data, dims = Tuple(1:ndims(data)-1)))
         title --> "Infection dynamics"
         xguide --> "Step"
         yguide --> "Totals"
         @series begin
-            label := name
+            label := class
             data
         end
     end
