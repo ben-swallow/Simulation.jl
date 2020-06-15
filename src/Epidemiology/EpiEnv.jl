@@ -25,7 +25,7 @@ mutable struct GridEpiEnv{H, C} <: AbstractEpiEnv{H, C}
     habitat::H
     active::AbstractMatrix{Bool}
     control::C
-    initial_population::AbstractMatrix{Int}
+    initial_population::AbstractArray{Int}
     names::Vector{String}
     function (::Type{GridEpiEnv{H, C}})(
         habitat::H,
@@ -42,9 +42,9 @@ mutable struct GridEpiEnv{H, C} <: AbstractEpiEnv{H, C}
                 "size(active)=$(size(active))"
             ))
         end
-        if size(initial_population) != size(active)
+        if size(initial_population)[end-1:end] != size(active)
             throw(DimensionMismatch(
-                "size(initial_population)=$(size(initial_population)) != " *
+                "size(initial_population)[end-1:end]=$(size(initial_population)[end-1:end]) != " *
                 "size(active)=$(size(active))"
             ))
         end
@@ -112,7 +112,7 @@ end
         area::Unitful.Area{Float64},
         active::AbstractMatrix{Bool},
         control::C,
-        initial_population::AbstractMatrix{<:Integer}=zeros(Int, dimension),
+        initial_population::AbstractArray{<:Integer}=zeros(Int, dimension),
     )
 
 Function to create a simple `ContinuousHab` type epi environment. It creates a
@@ -125,12 +125,12 @@ else one is created with all grid cells active.
 """
 function simplehabitatAE(
     val::Union{Float64, Unitful.Quantity{Float64}},
-    dimension::Tuple{Int64, Int64},
     area::Unitful.Area{Float64},
     active::AbstractMatrix{Bool},
     control::C,
-    initial_population::AbstractMatrix{<:Integer}=zeros(Int, dimension),
+    initial_population::AbstractArray{<:Integer}, # =zeros(Int, dimension),
 ) where C <: AbstractControl
+    dimension = size(active)
     if typeof(val) <: Unitful.Temperature
         val = uconvert(K, val)
     end
@@ -139,9 +139,10 @@ function simplehabitatAE(
 
     # Shrink to active region
     # This doesn't change the gridsquaresize
-    initial_population = _shrink_to_active(initial_population, active)
-    active = _shrink_to_active(active, active)
-    dimension = size(active)
+    # TODO fix this
+    #initial_population = _shrink_to_active(initial_population, active)
+    #active = _shrink_to_active(active, active)
+    #dimension = size(active)
 
     hab = simplehabitat(val, gridsquaresize, dimension)
     return GridEpiEnv{typeof(hab), typeof(control)}(hab, active, control, initial_population)
@@ -162,7 +163,7 @@ end
         val::Union{Float64, Unitful.Quantity{Float64}},
         area::Unitful.Area{Float64},
         control::C,
-        initial_population::AbstractMatrix{<:Real},
+        initial_population::AbstractArray{<:Real},
     )
 
 Create a simple `ContinuousHab` type epi environment from a specified `initial_population`
@@ -184,16 +185,21 @@ function simplehabitatAE(
     val::Union{Float64, Unitful.Quantity{Float64}},
     area::Unitful.Area{Float64},
     control::C,
-    initial_population::AbstractMatrix{<:Real},
+    initial_population::AbstractArray{<:Real},
 ) where C <: AbstractControl
-    inactive(x) = isnan(x) || ismissing(x)
+    inactive(x) = isnan(x) || ismissing(x) || x == 0
     if all(inactive.(initial_population))
-        throw(ArgumentError("initial_population is all NaN / missing"))
+        throw(ArgumentError("initial_population is all NaN / missing / 0"))
     end
     dimension = size(initial_population)
-    active = Matrix{Bool}(.!inactive.(initial_population))
+    active = Array{Bool}(.!inactive.(initial_population))
     initial_population = _convert_population(initial_population, active)
-    return simplehabitatAE(val, dimension, area, active, control, initial_population)
+    # reduce to 2D matrix
+    # active cells have at least one active compartment
+    reducedims = Tuple(1:ndims(active)-2)
+    active = reduce(|, active, dims=reducedims)
+    active = dropdims(active, dims=reducedims)
+    return simplehabitatAE(val, area, active, control, initial_population)
 end
 
 """
@@ -204,7 +210,7 @@ and rounding the active area.
 """
 function _convert_population(
     initial_population::Matrix{<:Real},
-    active::AbstractMatrix{Bool}
+    active::AbstractArray{Bool}
 )::Matrix{<:Int}
     initial_population[.!active] .= 0
     initial_population = Int.(round.(initial_population))
@@ -212,9 +218,9 @@ function _convert_population(
 end
 
 function _convert_population(
-    initial_population::AxisArray{<:Real, 2},
-    active::AbstractMatrix{Bool}
-)::AxisArray{<:Int, 2}
+    initial_population::AxisArray{<:Real},
+    active::AbstractArray{Bool}
+)::AxisArray{<:Int}
     # NOTE: this is a workaround as logical indexing directly on AxisArray leads to
     #   stackoverflow. see issue: https://github.com/JuliaArrays/AxisArrays.jl/issues/179
     initial_population.data[.!active] .= 0
