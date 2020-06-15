@@ -26,14 +26,49 @@ area = (AxisArrays.axes(scotpop, 1)[end] + AxisArrays.axes(scotpop, 1)[2] -
     (AxisArrays.axes(scotpop, 2)[end] + AxisArrays.axes(scotpop, 2)[2] -
     2 * AxisArrays.axes(scotpop, 2)[1]) * 1.0
 
-# Sum up age categories and turn into simple matrix
-total_pop = dropdims(sum(Float64.(scotpop), dims=3), dims=3)
-total_pop = AxisArray(total_pop, AxisArrays.axes(scotpop)[1], AxisArrays.axes(scotpop)[2])
-total_pop.data[total_pop .≈ 0.0] .= NaN
+# Set population to initially have no individuals
+abun_h = (
+    Susceptible = fill(0, age_categories),
+    Exposed = fill(0, age_categories),
+    Asymptomatic = fill(0, age_categories),
+    Presymptomatic = fill(0, age_categories),
+    Symptomatic = fill(0, age_categories),
+    Hospitalised = fill(0, age_categories),
+    Recovered = fill(0, age_categories),
+    Dead = fill(0, age_categories)
+)
+disease_classes = (
+    susceptible = ["Susceptible"],
+    infectious = ["Asymptomatic", "Presymptomatic", "Symptomatic"]
+)
+abun_v = (Virus = 0,)
+
+disease_axis = Axis{:class}(collect(keys(abun_h)))
+compartment_axes = (AxisArrays.axes(scotpop)..., disease_axis)
+# Populate susceptibles according to actual population spread
+initial_pop = cat(
+    scotpop,
+    zeros((size(scotpop)..., length(disease_axis)-1)),
+    dims=ndims(scotpop)+1
+)
+initial_pop = AxisArray(initial_pop, compartment_axes);
+initial_pop = permutedims(initial_pop, [3, 4, 1, 2])
+
+susc = @view initial_pop[class=:Susceptible]
+exposed = @view initial_pop[class=:Exposed]
+# Weight samples by number of susceptibles
+samples = sample(CartesianIndices(susc), weights(1.0 .* vec(susc)), 100)
+for samp in samples
+    susc[samp] > 0 || continue
+    # Add to exposed
+    exposed[samp] += 1
+    # Remove from susceptible
+    susc[samp] -= 1
+end
 
 # Set simulation parameters
-numclasses = 8
-numvirus = 1
+numclasses = length(abun_h)
+numvirus = length(abun_v)
 birth_rates = fill(0.0/day, numclasses, age_categories)
 death_rates = fill(0.0/day, numclasses, age_categories)
 birth_rates[:, 2:4] .= uconvert(day^-1, 1/20years)
@@ -69,26 +104,7 @@ param = SEI3HRDGrowth(birth_rates, death_rates, ageing,
                       T_lat, T_asym, T_presym, T_sym, T_hosp, T_rec)
 param = transition(param, age_categories)
 
-epienv = simplehabitatAE(298.0K, area, NoControl(), total_pop)
-
-# Set population to initially have no individuals
-abun_h = (
-    Susceptible = fill(0, age_categories),
-    Exposed = fill(0, age_categories),
-    Asymptomatic = fill(0, age_categories),
-    Presymptomatic = fill(0, age_categories),
-    Symptomatic = fill(0, age_categories),
-    Hospitalised = fill(0, age_categories),
-    Recovered = fill(0, age_categories),
-    Dead = fill(0, age_categories)
-)
-
-disease_classes = (
-    susceptible = ["Susceptible"],
-    infectious = ["Asymptomatic", "Presymptomatic", "Symptomatic"]
-)
-
-abun_v = (Virus = 0,)
+epienv = simplehabitatAE(298.0K, area, NoControl(), initial_pop)
 
 # Dispersal kernels for virus and disease classes
 dispersal_dists = fill(1.0km, numclasses * age_categories)
@@ -106,52 +122,15 @@ rel = Gauss{eltype(epienv.habitat)}()
 # Create epi system with all information
 epi = EpiSystem(epilist, epienv, rel)
 
-# Populate susceptibles according to actual population spread
-reshaped_pop =
-    reshape(scotpop[1:size(epienv.active, 1), 1:size(epienv.active, 2), :],
-            size(epienv.active, 1) * size(epienv.active, 2), size(scotpop, 3))'
-epi.abundances.matrix[cat_idx[:, 1], :] = reshaped_pop
-
-# Add in initial infections randomly (samples weighted by population size)
-# Define generator for all pair age x cell
-age_and_cells = Iterators.product(1:age_categories,
-                                  1:size(epi.abundances.matrix, 2))
-# Take all susceptibles of each age per cell
-pop_weights = epi.abundances.matrix[vcat(cat_idx[:, 1]...), :]
-# It would be nice if it wasn't necessary to call collect here
-N_cells = size(epi.abundances.matrix, 2)
-samp = sample(collect(age_and_cells), weights(1.0 .* vec(pop_weights)), 100)
-age_ids = getfield.(samp, 1)
-cell_ids = getfield.(samp, 2)
-
-for i in eachindex(age_ids)
-    if (epi.abundances.matrix[cat_idx[age_ids[i], 1], cell_ids[i]] > 0)
-        # Add to exposed
-        epi.abundances.matrix[cat_idx[age_ids[i], 2], cell_ids[i]] += 1
-        # Remove from susceptible
-        epi.abundances.matrix[cat_idx[age_ids[i], 1], cell_ids[i]] -= 1
-    end
-end
-
 # Run simulation
 times = 2months; interval = 1day; timestep = 1day
-abuns = zeros(Int64, size(epi.abundances.matrix, 1), N_cells,
-              floor(Int, times/timestep) + 1)
+Nsteps = floor(Int, times/timestep) + 1
+abuns = zeros(Int64, size(epi.abundances.matrix)..., Nsteps)
 @time simulate_record!(abuns, epi, times, interval, timestep)
 
 if do_plot
     using Plots
     # View summed SIR dynamics for whole area
-    category_map = (
-        "Susceptible" => cat_idx[:, 1],
-        "Exposed" => cat_idx[:, 2],
-        "Asymptomatic" => cat_idx[:, 3],
-        "Presymptomatic" => cat_idx[:, 4],
-        "Symptomatic" => cat_idx[:, 5],
-        "Hospital" => cat_idx[:, 6],
-        "Recovered" => cat_idx[:, 7],
-        "Deaths" => cat_idx[:, 8],
-    )
-    display(plot_epidynamics(epi, abuns, category_map = category_map))
+    display(plot_epidynamics(epi, abuns, classes=keys(abun_h)))
     display(plot_epiheatmaps(epi, abuns, steps = [21]))
 end
