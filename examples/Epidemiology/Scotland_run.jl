@@ -52,6 +52,8 @@ initial_pop = cat(
     dims=ndims(scotpop)+1
 )
 initial_pop = AxisArray(initial_pop, compartment_axes);
+# To be able to easily reshape to match abundances.matrix, the spatial axes have to be at
+# the end
 initial_pop = permutedims(initial_pop, [3, 4, 1, 2])
 
 susc = @view initial_pop[class=:Susceptible]
