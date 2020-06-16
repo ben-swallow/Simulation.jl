@@ -125,12 +125,12 @@ else one is created with all grid cells active.
 """
 function simplehabitatAE(
     val::Union{Float64, Unitful.Quantity{Float64}},
+    dimension::Tuple{Int64, Int64},
     area::Unitful.Area{Float64},
     active::AbstractMatrix{Bool},
     control::C,
-    initial_population::AbstractArray{<:Integer}, # =zeros(Int, dimension),
+    initial_population::AbstractArray{<:Integer}=zeros(Int, dimension),
 ) where C <: AbstractControl
-    dimension = size(active)
     if typeof(val) <: Unitful.Temperature
         val = uconvert(K, val)
     end
@@ -191,7 +191,6 @@ function simplehabitatAE(
     if all(inactive.(initial_population))
         throw(ArgumentError("initial_population is all NaN / missing / 0"))
     end
-    dimension = size(initial_population)
     active = Array{Bool}(.!inactive.(initial_population))
     initial_population = _convert_population(initial_population, active)
     # reduce to 2D matrix
@@ -199,7 +198,8 @@ function simplehabitatAE(
     reducedims = Tuple(1:ndims(active)-2)
     active = reduce(|, active, dims=reducedims)
     active = dropdims(active, dims=reducedims)
-    return simplehabitatAE(val, area, active, control, initial_population)
+    dimension = size(active)
+    return simplehabitatAE(val, dimension, area, active, control, initial_population)
 end
 
 """
