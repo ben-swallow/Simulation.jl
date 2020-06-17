@@ -8,7 +8,7 @@ using Distributions
 using AxisArrays
 using HTTP
 
-do_plot = false
+do_plot = true
 
 # Download and read in population sizes for Scotland
 file, io = mktemp()
