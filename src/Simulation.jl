@@ -44,6 +44,9 @@ include("ClimatePref/ClimatePref.jl")
 
 end
 
+using TimerOutputs
+const TIMING = TimerOutput()
+
 include("Biodiversity/Dist.jl")
 export Trapezoid
 

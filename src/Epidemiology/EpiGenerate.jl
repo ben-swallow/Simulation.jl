@@ -9,10 +9,10 @@ Function to update disease and virus class abundances and environment for one ti
 function update!(epi::EpiSystem, timestep::Unitful.Time)
 
     # Virus movement loop
-    virusupdate!(epi, timestep)
+    @timeit_debug TIMING "virusupdate!" virusupdate!(epi, timestep)
 
     # Birth/death/infection/recovery loop of each class
-    classupdate!(epi, timestep)
+    @timeit_debug TIMING "classupdate!" classupdate!(epi, timestep)
 
     # Invalidate all caches for next update
     invalidatecaches!(epi)
@@ -34,7 +34,7 @@ function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
     rng = epi.abundances.seed[id]
     classes = findall((params.virus_growth .* timestep) .> 0)
     # Loop through grid squares
-    Threads.@threads for j in classes
+    @timeit_debug TIMING "virusupdate" Threads.@threads for j in classes
         for i in 1:dims
             # Calculate how much birth and death should be adjusted
 
@@ -48,7 +48,7 @@ function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
             births = rand(rng, Poisson(birthrate))
 
             # Update population
-            if (!iszero(births))
+            @timeit_debug TIMING "virusmove" if (!iszero(births))
                 epi.cache.virusmigration[j, i] += births
                 virusmove!(epi, i, j, epi.cache.virusmigration, births)
             end
@@ -64,7 +64,7 @@ function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
             epi.cache.virusdecay[j, i] -= deaths
         end
     end
-    Threads.@threads for l in 1:size(epi.cache.virusmigration, 2)
+    @timeit_debug TIMING "virusmigration_stoch" Threads.@threads for l in 1:size(epi.cache.virusmigration, 2)
         for k in 1:size(epi.cache.virusmigration, 1)
             iszero(epi.cache.virusmigration[k, l]) && continue
             dist = Poisson(epi.cache.virusmigration[k, l])
@@ -227,8 +227,8 @@ function calc_lookup_moves!(bound::NoBoundary, x::Int64, y::Int64, id::Int64, ep
         lookuppnew[i] = lookuppi
     end
     # Case that produces NaN (if sum(lookup.pnew) also pnew always .>= 0) dealt with above
-    lookuppnew ./= sum_pop(lookuppnew)
-    lookup.moves .= abun .* lookuppnew
+    @timeit_debug TIMING "sumpop" lookuppnew ./= sum_pop(lookuppnew)
+    @timeit_debug TIMING "lookupmove" lookup.moves .= abun .* lookuppnew
     return nothing
 end
 
@@ -278,15 +278,17 @@ function virusmove!(epi::AbstractEpiSystem, pos::Int64, id::Int64, grd::Array{Fl
   width, height = getdimension(epi)
   (x, y) = convert_coords(epi, pos, width)
   lookup = getlookup(epi, id)
-  calc_lookup_moves!(getboundary(epi.epilist.human.movement), x, y, id, epi, newvirus)
+  @timeit_debug TIMING "calc_lookup_moves" calc_lookup_moves!(getboundary(epi.epilist.human.movement), x, y, id, epi, newvirus)
   # Lose moves from current grid square
   grd[id, pos] -= newvirus
   # Map moves to location in grid
-  @inbounds for (i, move) in enumerate(lookup.moves)
-      newx = quickmod(lookup.x[i] + x - 1, width) + 1
-      newy = quickmod(lookup.y[i] + y - 1, height) + 1
-      loc = convert_coords(epi, (newx, newy), width)
-      grd[id, loc] += move
+  @timeit_debug TIMING "map_move2grid" begin
+      @inbounds for (i, move) in enumerate(lookup.moves)
+          newx = quickmod(lookup.x[i] + x - 1, width) + 1
+          newy = quickmod(lookup.y[i] + y - 1, height) + 1
+          loc = convert_coords(epi, (newx, newy), width)
+          grd[id, loc] += move
+      end
   end
   return epi
 end

@@ -4,7 +4,11 @@ using Unitful.DefaultSymbols
 using Simulation.Units
 using Simulation.ClimatePref
 using StatsBase
+using TimerOutputs
 using Plots
+
+TimerOutputs.enable_debug_timings(Simulation)
+reset_timer!(Simulation.TIMING);
 
 function run_model(times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time, do_plot::Bool = false)
 
@@ -96,5 +100,8 @@ function run_model(times::Unitful.Time, interval::Unitful.Time, timestep::Unitfu
     end
 end
 
-times = 1year; interval = 1day; timestep = 1day
+times = 1year; interval = 2day; timestep = 1day
 abuns = run_model(times, interval, timestep);
+
+Simulation.TIMING
+TimerOutputs.flatten(Simulation.TIMING)
