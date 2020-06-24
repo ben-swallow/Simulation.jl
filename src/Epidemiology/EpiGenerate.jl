@@ -15,11 +15,11 @@ function update!(epi::EpiSystem, timestep::Unitful.Time)
     @timeit_debug TIMING "classupdate!" classupdate!(epi, timestep)
 
     # Invalidate all caches for next update
-    invalidatecaches!(epi)
+    @timeit_debug TIMING "invalidatecaches!" invalidatecaches!(epi)
 
     # Update environment - habitat and energy budgets
-    habitatupdate!(epi, timestep)
-    applycontrols!(epi, timestep)
+    @timeit_debug TIMING "habitatupdate!" habitatupdate!(epi, timestep)
+    @timeit_debug TIMING "applycontrols!" applycontrols!(epi, timestep)
 end
 
 """
@@ -32,7 +32,7 @@ function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
     params = epi.epilist.params
     id = Threads.threadid()
     rng = epi.abundances.seed[id]
-    classes = findall((params.virus_growth .* timestep) .> 0)
+    @timeit_debug TIMING "findclass" classes = findall((params.virus_growth .* timestep) .> 0)
     # Loop through grid squares
     @timeit_debug TIMING "virusupdate" Threads.@threads for j in classes
         for i in 1:dims
