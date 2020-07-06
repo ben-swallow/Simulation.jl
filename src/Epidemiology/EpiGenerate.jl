@@ -27,40 +27,49 @@ end
 Function to update virus abundances and disperse for one timestep.
 """
 function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
-    dims = _countsubcommunities(epi.epienv.habitat)
-    width = getdimension(epi)[1]
-    params = epi.epilist.params
-    id = Threads.threadid()
-    rng = epi.abundances.seed[id]
-    classes = findall((params.virus_growth .* timestep) .> 0)
+    @timeit_debug TIMING "rest virus update" begin
+        dims = _countsubcommunities(epi.epienv.habitat)
+        width = getdimension(epi)[1]
+        params = epi.epilist.params
+        id = Threads.threadid()
+        rng = epi.abundances.seed[id]
+        classes = findall((params.virus_growth .* timestep) .> 0)
 
-    # Convert 1D dimension to 2D coordinates with (x, y) = convert_coords(epi, j, width)
-    # Check which grid cells are active, only iterate along those
-    activejindices = findall(j->epi.epienv.active[convert_coords(epi, j, width)...], 1:dims)
+        # Convert 1D dimension to 2D coordinates with (x, y) = convert_coords(epi, j, width)
+        # Check which grid cells are active, only iterate along those
+        activejindices = findall(j->epi.epienv.active[convert_coords(epi, j, width)...], 1:dims)
+    end
     # Loop through grid squares
     function firstloop(i)
-        for j in activejindices
-            # Calculate how much birth and death should be adjusted
+        @timeit_debug TIMING "firstloop" begin
+            for j in activejindices
+                # Calculate how much birth and death should be adjusted
 
-            # Calculate effective rates
-            birthrate = params.virus_growth[i] * timestep * human(epi.abundances)[i, j]
-            births = rand(rng, Poisson(birthrate))
+                # Calculate effective rates
+                @timeit_debug TIMING "birth draw" begin
+                    birthrate = params.virus_growth[i] * timestep * human(epi.abundances)[i, j]
+                    births = rand(rng, Poisson(birthrate))
+                end
 
-            # Update population
-            if (!iszero(births))
-                epi.cache.virusmigration[i, j] += births
-                virusmove!(epi, i, j, epi.cache.virusmigration, births)
+                # Update population
+                if (!iszero(births))
+                    epi.cache.virusmigration[i, j] += births
+                    @timeit_debug TIMING "virusmove" virusmove!(epi, i, j, epi.cache.virusmigration, births)
+                end
+
+                @timeit_debug TIMING "death draw" begin
+                    iszero(params.virus_decay[i]) && continue
+                    traitmatch = traitfun(epi, j, 1)
+                    deathrate = params.virus_decay[i] * timestep * traitmatch^-1
+                    # Convert death rate into 0 - 1 probability
+                    deathprob = 1.0 - exp(-deathrate)
+
+                    # Calculate how many births and deaths
+
+                    deaths = rand(rng, Binomial(virus(epi.abundances)[1, j], deathprob))
+                    epi.cache.virusdecay[i, j] -= deaths
+                end
             end
-
-            iszero(params.virus_decay[i]) && continue
-            traitmatch = traitfun(epi, j, 1)
-            deathrate = params.virus_decay[i] * timestep * traitmatch^-1
-            # Convert death rate into 0 - 1 probability
-            deathprob = 1.0 - exp(-deathrate)
-
-            # Calculate how many births and deaths
-            deaths = rand(rng, Binomial(virus(epi.abundances)[1, j], deathprob))
-            epi.cache.virusdecay[i, j] -= deaths
         end
     end
 
@@ -73,20 +82,22 @@ function virusupdate!(epi::EpiSystem, timestep::Unitful.Time)
     notclasses = [i for i in 1:size(epi.cache.virusmigration, 1) if !(i in classes)]
     ordered_i_loop = vcat(notclasses, classes)
     function secondloop(j)
-        vm = zero(eltype(epi.cache.virusmigration))
-        nm = zero(eltype(epi.cache.virusdecay))
-        # order the work so that the spawned tasks come towards the end of the loop
-        for i in ordered_i_loop
-            haskey(firstlooptasks, i) && Threads.wait(firstlooptasks[i])
-            # after wait virusmigration[i, j] will be up to date
-            iszero(epi.cache.virusmigration[i, j]) && continue
-            dist = Poisson(epi.cache.virusmigration[i, j])
-            epi.cache.virusmigration[i, j] = rand(rng, dist)
-            vm += epi.cache.virusmigration[i, j]
-            nm += epi.cache.virusdecay[i, j]
-        end
-        virus(epi.abundances)[1, j] += (nm + vm)
-        virus(epi.abundances)[2, j] = vm
+        # @timeit_debug TIMING "secondloop" begin
+            vm = zero(eltype(epi.cache.virusmigration))
+            nm = zero(eltype(epi.cache.virusdecay))
+            # order the work so that the spawned tasks come towards the end of the loop
+            for i in ordered_i_loop
+                haskey(firstlooptasks, i) && Threads.wait(firstlooptasks[i])
+                # after wait virusmigration[i, j] will be up to date
+                iszero(epi.cache.virusmigration[i, j]) && continue
+                dist = Poisson(epi.cache.virusmigration[i, j])
+                epi.cache.virusmigration[i, j] = rand(rng, dist)
+                vm += epi.cache.virusmigration[i, j]
+                nm += epi.cache.virusdecay[i, j]
+            end
+            virus(epi.abundances)[1, j] += (nm + vm)
+            virus(epi.abundances)[2, j] = vm
+        # end
     end
 
     jindices = 1:size(epi.cache.virusmigration, 2)
@@ -243,8 +254,8 @@ function calc_lookup_moves!(bound::NoBoundary, x::Int64, y::Int64, id::Int64, ep
         lookuppnew[i] = lookuppi
     end
     # Case that produces NaN (if sum(lookup.pnew) also pnew always .>= 0) dealt with above
-    @timeit_debug TIMING "sumpop" lookuppnew ./= sum_pop(lookuppnew)
-    @timeit_debug TIMING "lookupmove" lookup.moves .= abun .* lookuppnew
+    lookuppnew ./= sum_pop(lookuppnew)
+    lookup.moves .= abun .* lookuppnew
     return nothing
 end
 
@@ -294,18 +305,17 @@ function virusmove!(epi::AbstractEpiSystem, id::Int64, pos::Int64, grd::Array{Fl
   width, height = getdimension(epi)
   (x, y) = convert_coords(epi, pos, width)
   lookup = getlookup(epi, id)
-  @timeit_debug TIMING "calc_lookup_moves" calc_lookup_moves!(getboundary(epi.epilist.human.movement), x, y, id, epi, newvirus)
+  calc_lookup_moves!(getboundary(epi.epilist.human.movement), x, y, id, epi, newvirus)
   # Lose moves from current grid square
   grd[id, pos] -= newvirus
   # Map moves to location in grid
-  @timeit_debug TIMING "map_move2grid" begin
-      @inbounds for (i, move) in enumerate(lookup.moves)
-          newx = quickmod(lookup.x[i] + x - 1, width) + 1
-          newy = quickmod(lookup.y[i] + y - 1, height) + 1
-          loc = convert_coords(epi, (newx, newy), width)
-          grd[id, loc] += move
-      end
+  @inbounds for (i, move) in enumerate(lookup.moves)
+      newx = quickmod(lookup.x[i] + x - 1, width) + 1
+      newy = quickmod(lookup.y[i] + y - 1, height) + 1
+      loc = convert_coords(epi, (newx, newy), width)
+      grd[id, loc] += move
   end
+
   return epi
 end
 
