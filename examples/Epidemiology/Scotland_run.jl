@@ -8,13 +8,17 @@ using Distributions
 using AxisArrays
 using HTTP
 using Plots
+using TimerOutputs
+
+TimerOutputs.enable_debug_timings(Simulation)
+reset_timer!(Simulation.TIMING);
 
 function run_model(times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool = false, do_download::Bool = true, save::Bool = false, savepath::String = pwd())
     # Download and read in population sizes for Scotland
     dir = Simulation.path("test", "TEMP")
     file = joinpath(dir, "demographics.h5")
     if do_download
-        mkdir(Simulation.path("test", "TEMP"))
+        !isdir(dir) && mkdir(Simulation.path("test", "TEMP"))
         io = open(Simulation.path("test", "TEMP", "demographics.h5"), "w")
         r = HTTP.request("GET", "https://raw.githubusercontent.com/ScottishCovidResponse/temporary_data/master/human/demographics/scotland/data/demographics.h5")
         write(io, r.body)
@@ -165,3 +169,6 @@ end
 
 times = 2months; interval = 1day; timestep = 1day
 abuns = run_model(times, interval, timestep);
+
+Simulation.TIMING
+TimerOutputs.flatten(Simulation.TIMING)
