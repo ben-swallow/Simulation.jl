@@ -30,7 +30,7 @@ install:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --project=@. -e "using Pkg; Pkg.activate(\".\"); Pkg.instantiate(); Pkg.test(\"Simulation\", coverage=true);"
+  - julia --project=@. -e "using Pkg; Pkg.activate(\".\"); Pkg.instantiate(); Pkg.build(\"Simulation\"); Pkg.test(\"Simulation\", coverage=true);"
 
 after_success:
   # push coverage results to Coveralls
